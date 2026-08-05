@@ -14,6 +14,9 @@ venv/
 # Secrets (e.g. a locally-saved HF token for diarization)
 .env
 
+# Claude Code local session state
+.claude/
+
 # macOS
 .DS_Store
 
