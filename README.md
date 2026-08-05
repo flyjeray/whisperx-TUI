@@ -11,13 +11,18 @@ first time they're needed.
 
 ## Running it
 
+Double-click whisperx-tui.app in Finder. It opens a Terminal window and
+launches the app.
+
+Or from the terminal:
+
     cd whisper-UI
     ./bootstrap.sh
 
-That's the only command you need. It checks for Python, sets up the venv if
-it doesn't exist yet, and launches the app. On a clean machine the very first
-run will take a few minutes since it has to download whisperx's dependencies
-(mainly torch) and, later, the actual transcription models.
+Either way it's the same script underneath: checks for Python, sets up the
+venv if it doesn't exist yet, and launches the app. On a clean machine the
+very first run will take a few minutes since it has to download whisperx's
+dependencies (mainly torch) and, later, the actual transcription models.
 
 ## Using it
 

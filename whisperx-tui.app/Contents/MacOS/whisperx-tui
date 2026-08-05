@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+BOOTSTRAP="$REPO_DIR/bootstrap.sh"
+
+osascript <<APPLESCRIPT
+tell application "Terminal"
+    activate
+    do script "\"$BOOTSTRAP\""
+end tell
+APPLESCRIPT
