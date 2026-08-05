@@ -1,0 +1,50 @@
+import asyncio
+from collections.abc import AsyncIterator
+
+from whisperx_tui.config import RunParams, VENV_DIR, MODEL_CACHE_DIR
+
+
+def build_argv(params: RunParams) -> list[str]:
+    argv = [
+        str(VENV_DIR / "bin" / "whisperx"),
+        str(params.audio_path),
+        "--output_dir", str(params.output_dir),
+        "--output_format", params.output_format,
+        "--model", params.model,
+        "--model_dir", str(MODEL_CACHE_DIR),
+        "--task", params.task,
+        "--device", "cpu",
+        "--compute_type", params.compute_type,
+        "--batch_size", str(params.batch_size),
+    ]
+
+    if params.language:
+        argv += ["--language", params.language]
+
+    if params.diarize:
+        argv.append("--diarize")
+        if params.hf_token:
+            argv += ["--hf_token", params.hf_token]
+        if params.min_speakers is not None:
+            argv += ["--min_speakers", str(params.min_speakers)]
+        if params.max_speakers is not None:
+            argv += ["--max_speakers", str(params.max_speakers)]
+
+    return argv
+
+
+async def run_whisperx(params: RunParams) -> AsyncIterator[str]:
+    argv = build_argv(params)
+    process = await asyncio.create_subprocess_exec(
+        *argv,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    assert process.stdout is not None
+
+    async for raw_line in process.stdout:
+        yield raw_line.decode(errors="replace").rstrip("\n")
+
+    returncode = await process.wait()
+    if returncode != 0:
+        raise RuntimeError(f"whisperx exited with code {returncode}")
