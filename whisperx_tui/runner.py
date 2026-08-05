@@ -1,7 +1,30 @@
 import asyncio
+import shutil
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from whisperx_tui.config import RunParams, VENV_DIR, MODEL_CACHE_DIR
+
+
+async def get_audio_duration_seconds(path: Path) -> float | None:
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        return None
+
+    process = await asyncio.create_subprocess_exec(
+        ffprobe, "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await process.communicate()
+    if process.returncode != 0:
+        return None
+
+    try:
+        return float(stdout.decode().strip())
+    except ValueError:
+        return None
 
 
 def build_argv(params: RunParams) -> list[str]:
@@ -16,6 +39,7 @@ def build_argv(params: RunParams) -> list[str]:
         "--device", "cpu",
         "--compute_type", params.compute_type,
         "--batch_size", str(params.batch_size),
+        "--print_progress", "True",
     ]
 
     if params.language:
