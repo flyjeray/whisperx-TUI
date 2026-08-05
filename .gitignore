@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Local venvs (the app's real venv lives outside the repo, under
+# ~/Library/Application Support/whisperx-tui/venv -- this just covers
+# any venv created locally for development)
+.venv/
+venv/
+
+# Secrets (e.g. a locally-saved HF token for diarization)
+.env
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
