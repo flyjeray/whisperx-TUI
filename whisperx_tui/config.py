@@ -8,6 +8,8 @@ MODEL_CACHE_DIR = APP_DIR / "models"
 
 OUTPUT_FORMATS = ("all", "srt", "vtt", "txt", "tsv", "json")
 CPU_COMPUTE_TYPES = ("int8", "float32")
+MODEL_SIZES = ("tiny", "base", "small", "medium", "large-v2", "large-v3", "large-v3-turbo")
+TASKS = ("transcribe", "translate")
 
 
 @dataclass

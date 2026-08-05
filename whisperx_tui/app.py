@@ -3,9 +3,11 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static
 
+from whisperx_tui.config import RunParams
 from whisperx_tui.deps import is_ffmpeg_on_path, is_whisperx_importable
 from whisperx_tui.screens.dest_select_screen import pick_destination_folder
 from whisperx_tui.screens.file_select_screen import pick_audio_file
+from whisperx_tui.screens.params_screen import ParamsScreen
 from whisperx_tui.screens.setup_screen import SetupScreen
 
 
@@ -15,10 +17,12 @@ class WhisperXTUIApp(App[None]):
         ("q", "quit", "Quit"),
         ("o", "pick_file", "Pick audio file"),
         ("d", "pick_dest", "Pick destination"),
+        ("p", "pick_params", "Set parameters"),
     ]
 
     audio_path: Path | None = None
     dest_dir: Path | None = None
+    run_params: RunParams | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -30,11 +34,23 @@ class WhisperXTUIApp(App[None]):
             self.push_screen(SetupScreen())
 
     def _status_text(self) -> str:
-        return (
-            "Params/run screens aren't built yet.\n\n"
-            f"Audio file: {self.audio_path or '(none -- press o to pick)'}\n"
-            f"Destination: {self.dest_dir or '(none -- press d to pick)'}"
-        )
+        lines = [
+            "Run screen isn't built yet.\n",
+            f"Audio file: {self.audio_path or '(none -- press o to pick)'}",
+            f"Destination: {self.dest_dir or '(none -- press d to pick)'}",
+        ]
+        if self.audio_path and self.dest_dir:
+            params = self.run_params
+            lines.append(
+                "Parameters: "
+                + (
+                    f"model={params.model}, language={params.language or 'auto'}, "
+                    f"diarize={params.diarize} (press p to change)"
+                    if params
+                    else "(none -- press p to set)"
+                )
+            )
+        return "\n".join(lines)
 
     def _refresh_status(self) -> None:
         self.query_one("#placeholder", Static).update(self._status_text())
@@ -44,6 +60,11 @@ class WhisperXTUIApp(App[None]):
 
     def action_pick_dest(self) -> None:
         self.run_worker(self._pick_dest(), exclusive=True)
+
+    def action_pick_params(self) -> None:
+        if self.audio_path is None or self.dest_dir is None:
+            return
+        self.run_worker(self._pick_params(), exclusive=True)
 
     async def _pick_file(self) -> None:
         result = await pick_audio_file(self, start_dir=Path.home())
@@ -56,6 +77,12 @@ class WhisperXTUIApp(App[None]):
         if result is not None:
             self.dest_dir = result
             self._refresh_status()
+
+    async def _pick_params(self) -> None:
+        assert self.audio_path is not None and self.dest_dir is not None
+        result = await self.push_screen_wait(ParamsScreen(self.audio_path, self.dest_dir))
+        self.run_params = result
+        self._refresh_status()
 
 
 def main() -> None:
