@@ -4,6 +4,7 @@
 # and installs the TUI's own dependencies into it.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="whisperx-tui"
 APP_DIR="$HOME/Library/Application Support/$APP_NAME"
 VENV_DIR="$APP_DIR/venv"
@@ -84,8 +85,9 @@ if [[ "$FRESH_VENV" -eq 1 ]]; then
   "$VENV_DIR/bin/pip" install textual textual-fspicker
 fi
 
-log "Bootstrap complete."
-log "Venv ready at: $VENV_DIR"
-# whisperx itself and the Textual app aren't wired up yet (later build steps);
-# this pass only proves out the Python/venv bootstrap.
-log "(whisperx_tui.app doesn't exist yet -- this bootstrap pass stops here.)"
+log "Bootstrap complete. Launching whisperx-tui..."
+
+# whisperx itself isn't installed here -- the app checks for it on startup
+# and installs it (plus ffmpeg) via its own setup screen if missing.
+cd "$SCRIPT_DIR"
+exec "$VENV_DIR/bin/python" -m whisperx_tui.app
