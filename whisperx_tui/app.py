@@ -8,6 +8,7 @@ from whisperx_tui.deps import is_ffmpeg_on_path, is_whisperx_importable
 from whisperx_tui.screens.dest_select_screen import pick_destination_folder
 from whisperx_tui.screens.file_select_screen import pick_audio_file
 from whisperx_tui.screens.params_screen import ParamsScreen
+from whisperx_tui.screens.run_screen import RunScreen
 from whisperx_tui.screens.setup_screen import SetupScreen
 
 
@@ -17,7 +18,7 @@ class WhisperXTUIApp(App[None]):
         ("q", "quit", "Quit"),
         ("o", "pick_file", "Pick audio file"),
         ("d", "pick_dest", "Pick destination"),
-        ("p", "pick_params", "Set parameters"),
+        ("p", "pick_params", "Set parameters & run"),
     ]
 
     audio_path: Path | None = None
@@ -35,20 +36,16 @@ class WhisperXTUIApp(App[None]):
 
     def _status_text(self) -> str:
         lines = [
-            "Run screen isn't built yet.\n",
             f"Audio file: {self.audio_path or '(none -- press o to pick)'}",
             f"Destination: {self.dest_dir or '(none -- press d to pick)'}",
         ]
         if self.audio_path and self.dest_dir:
+            lines.append("Press p to set parameters and start transcription.")
+        if self.run_params is not None:
             params = self.run_params
             lines.append(
-                "Parameters: "
-                + (
-                    f"model={params.model}, language={params.language or 'auto'}, "
-                    f"diarize={params.diarize} (press p to change)"
-                    if params
-                    else "(none -- press p to set)"
-                )
+                f"\nLast run: model={params.model}, language={params.language or 'auto'}, "
+                f"diarize={params.diarize}"
             )
         return "\n".join(lines)
 
@@ -82,6 +79,8 @@ class WhisperXTUIApp(App[None]):
         assert self.audio_path is not None and self.dest_dir is not None
         result = await self.push_screen_wait(ParamsScreen(self.audio_path, self.dest_dir))
         self.run_params = result
+        self._refresh_status()
+        await self.push_screen_wait(RunScreen(result))
         self._refresh_status()
 
 
