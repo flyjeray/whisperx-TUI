@@ -11,16 +11,17 @@ from whisperx_tui.config import CPU_COMPUTE_TYPES, MODEL_SIZES, OUTPUT_FORMATS, 
 _DEFAULTS = {f.name: f.default for f in dataclasses.fields(RunParams)}
 
 
-class ParamsScreen(Screen[RunParams]):
-    def __init__(self, audio_path: Path, output_dir: Path) -> None:
+class ParamsScreen(Screen[list[RunParams]]):
+    def __init__(self, queue: list[Path], output_dir: Path) -> None:
         super().__init__()
-        self.audio_path = audio_path
+        self.queue = queue
         self.output_dir = output_dir
 
     def compose(self) -> ComposeResult:
         yield Header()
+        queue_listing = "\n".join(f"  - {path.name}" for path in self.queue)
         yield VerticalScroll(
-            Static(f"Audio: {self.audio_path}"),
+            Static(f"Queue ({len(self.queue)} file(s)):\n{queue_listing}"),
             Static(f"Destination: {self.output_dir}"),
             Label("Model"),
             Select(
@@ -91,14 +92,13 @@ class ParamsScreen(Screen[RunParams]):
         assert isinstance(value, str)
         return value
 
-    def _build_run_params(self) -> RunParams:
+    def _build_run_params(self) -> list[RunParams]:
         diarize = self.query_one("#diarize", Switch).value
         batch_size_raw = self._input_value("batch_size") or str(_DEFAULTS["batch_size"])
         min_speakers_raw = self._input_value("min_speakers")
         max_speakers_raw = self._input_value("max_speakers")
 
-        return RunParams(
-            audio_path=self.audio_path,
+        shared = dict(
             output_dir=self.output_dir,
             model=self._select_value("model"),
             language=self._input_value("language") or None,
@@ -111,3 +111,5 @@ class ParamsScreen(Screen[RunParams]):
             min_speakers=int(min_speakers_raw) if diarize and min_speakers_raw else None,
             max_speakers=int(max_speakers_raw) if diarize and max_speakers_raw else None,
         )
+
+        return [RunParams(audio_path=audio_path, **shared) for audio_path in self.queue]

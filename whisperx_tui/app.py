@@ -6,7 +6,7 @@ from textual.widgets import Footer, Header, Static
 from whisperx_tui.config import RunParams
 from whisperx_tui.deps import is_ffmpeg_on_path, is_whisperx_importable
 from whisperx_tui.screens.dest_select_screen import pick_destination_folder
-from whisperx_tui.screens.file_select_screen import pick_audio_file
+from whisperx_tui.screens.file_select_screen import pick_audio_paths
 from whisperx_tui.screens.params_screen import ParamsScreen
 from whisperx_tui.screens.run_screen import RunScreen
 from whisperx_tui.screens.setup_screen import SetupScreen
@@ -16,14 +16,18 @@ class WhisperXTUIApp(App[None]):
     TITLE = "whisperx-tui"
     BINDINGS = [
         ("q", "quit", "Quit"),
-        ("o", "pick_file", "Pick audio file"),
+        ("o", "pick_file", "Add file/folder"),
+        ("c", "clear_queue", "Clear queue"),
         ("d", "pick_dest", "Pick destination"),
         ("p", "pick_params", "Set parameters & run"),
     ]
 
-    audio_path: Path | None = None
     dest_dir: Path | None = None
     run_params: RunParams | None = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.queue: list[Path] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -35,11 +39,16 @@ class WhisperXTUIApp(App[None]):
             self.push_screen(SetupScreen())
 
     def _status_text(self) -> str:
+        if self.queue:
+            listing = "\n".join(f"  - {path.name}" for path in self.queue)
+            queue_text = f"Queue ({len(self.queue)} file(s)):\n{listing}"
+        else:
+            queue_text = "Queue: (empty -- press o to add a file, or a whole folder)"
         lines = [
-            f"Audio file: {self.audio_path or '(none -- press o to pick)'}",
+            queue_text,
             f"Destination: {self.dest_dir or '(none -- press d to pick)'}",
         ]
-        if self.audio_path and self.dest_dir:
+        if self.queue and self.dest_dir:
             lines.append("Press p to set parameters and start transcription.")
         if self.run_params is not None:
             params = self.run_params
@@ -55,19 +64,33 @@ class WhisperXTUIApp(App[None]):
     def action_pick_file(self) -> None:
         self.run_worker(self._pick_file(), exclusive=True)
 
+    def action_clear_queue(self) -> None:
+        self.queue = []
+        self._refresh_status()
+
     def action_pick_dest(self) -> None:
         self.run_worker(self._pick_dest(), exclusive=True)
 
     def action_pick_params(self) -> None:
-        if self.audio_path is None or self.dest_dir is None:
+        if not self.queue or self.dest_dir is None:
             return
         self.run_worker(self._pick_params(), exclusive=True)
 
     async def _pick_file(self) -> None:
-        result = await pick_audio_file(self, start_dir=Path.home())
-        if result is not None:
-            self.audio_path = result
-            self._refresh_status()
+        result = await pick_audio_paths(self, start_dir=Path.home())
+        if result is None:
+            return
+        if not result:
+            self.notify("No audio files found in that folder.", severity="warning")
+            return
+        already_queued = set(self.queue)
+        added = [path for path in result if path not in already_queued]
+        self.queue = self.queue + added
+        self._refresh_status()
+        if len(added) < len(result):
+            self.notify(f"Added {len(added)} file(s); {len(result) - len(added)} already queued.")
+        else:
+            self.notify(f"Added {len(added)} file(s) to the queue.")
 
     async def _pick_dest(self) -> None:
         result = await pick_destination_folder(self, start_dir=Path.home())
@@ -76,9 +99,12 @@ class WhisperXTUIApp(App[None]):
             self._refresh_status()
 
     async def _pick_params(self) -> None:
-        assert self.audio_path is not None and self.dest_dir is not None
-        result = await self.push_screen_wait(ParamsScreen(self.audio_path, self.dest_dir))
-        self.run_params = result
+        assert self.dest_dir is not None
+        result = await self.push_screen_wait(ParamsScreen(self.queue, self.dest_dir))
+        if not result:
+            return
+        self.run_params = result[-1]
+        self.queue = []
         self._refresh_status()
         await self.push_screen_wait(RunScreen(result))
         self._refresh_status()

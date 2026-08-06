@@ -36,15 +36,16 @@ _STAGE_MARKERS = (
 
 
 class RunScreen(Screen[None]):
-    def __init__(self, params: RunParams) -> None:
+    def __init__(self, queue: list[RunParams]) -> None:
         super().__init__()
-        self.params = params
+        self.queue = queue
         self._stage = "detect"
+        self._failures: list[tuple[RunParams, Exception]] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Vertical(
-            Static(f"Transcribing: {self.params.audio_path.name}", id="run-summary"),
+            Static(self._queue_summary(0), id="run-summary"),
             Static("Starting...", id="run-phase"),
             ProgressBar(total=100, id="run-progress", show_eta=False),
             Static("Running...", id="run-status"),
@@ -55,61 +56,87 @@ class RunScreen(Screen[None]):
         )
         yield Footer()
 
+    def _queue_summary(self, index: int) -> str:
+        params = self.queue[index]
+        return f"Transcribing file {index + 1} of {len(self.queue)}: {params.audio_path.name}"
+
     def on_mount(self) -> None:
         self.query_one("#run-log", Log).display = False
-        self.run_worker(self._run(), exclusive=True)
+        self.run_worker(self._run_queue(), exclusive=True)
 
-    async def _run(self) -> None:
-        log = self.query_one("#run-log", Log)
+    async def _run_queue(self) -> None:
+        summary = self.query_one("#run-summary", Static)
         status = self.query_one("#run-status", Static)
-        phase = self.query_one("#run-phase", Static)
-        progress_bar = self.query_one("#run-progress", ProgressBar)
-        duration = await get_audio_duration_seconds(self.params.audio_path)
-        try:
-            async for line in run_whisperx(self.params):
-                for marker, stage, label in _STAGE_MARKERS:
-                    if marker in line:
-                        self._stage = stage
-                        phase.update(label)
-                        break
+        log = self.query_one("#run-log", Log)
 
-                transcript_match = _TRANSCRIPT_TIME_RE.search(line)
-                progress_match = _PROGRESS_RE.search(line)
+        for index, params in enumerate(self.queue):
+            summary.update(self._queue_summary(index))
+            self._stage = "detect"
+            try:
+                await self._run_one(params)
+            except Exception as exc:
+                self._failures.append((params, exc))
+                log.write_line(f"[{params.audio_path.name}] failed: {exc}")
 
-                if self._stage == "align" and progress_match:
-                    # No per-segment timestamps available during alignment,
-                    # so this is the best signal there is.
-                    progress_bar.update(progress=50 + float(progress_match.group(1)) / 2)
-                elif self._stage == "transcribe" and duration and transcript_match:
-                    end_time = float(transcript_match.group(1))
-                    percent = min(100.0, (end_time / duration) * 100)
-                    progress_bar.update(progress=percent / 2)
-                elif self._stage == "transcribe" and not duration and progress_match:
-                    # ffprobe unavailable -- fall back to the coarser
-                    # segment-count metric rather than showing nothing.
-                    progress_bar.update(progress=float(progress_match.group(1)) / 2)
-
-                if not progress_match:
-                    log.write_line(line)
-        except Exception as exc:
-            status.update(f"Failed: {exc} (see details below)")
+        if self._failures:
+            failed = "\n".join(f"  - {p.audio_path.name}: {exc}" for p, exc in self._failures)
+            succeeded = len(self.queue) - len(self._failures)
+            status.update(
+                f"Done: {succeeded}/{len(self.queue)} succeeded. Failed:\n{failed}"
+            )
             log.display = True
         else:
-            phase.update("Finished")
-            progress_bar.update(progress=100)
-            outputs = self._output_files()
-            if outputs:
-                listing = "\n".join(f"  - {path}" for path in outputs)
-                status.update(f"Done. Output files:\n{listing}")
-            else:
-                status.update("Done, but no output files were found -- check the log below.")
-                log.display = True
-        finally:
-            self.query_one("#done-button", Button).disabled = False
+            status.update(f"Done. All {len(self.queue)} file(s) transcribed successfully.")
+        self.query_one("#done-button", Button).disabled = False
 
-    def _output_files(self) -> list[Path]:
-        stem = self.params.audio_path.stem
-        return sorted(self.params.output_dir.glob(f"{stem}.*"))
+    async def _run_one(self, params: RunParams) -> None:
+        log = self.query_one("#run-log", Log)
+        phase = self.query_one("#run-phase", Static)
+        progress_bar = self.query_one("#run-progress", ProgressBar)
+        progress_bar.update(progress=0)
+        duration = await get_audio_duration_seconds(params.audio_path)
+
+        async for line in run_whisperx(params):
+            for marker, stage, label in _STAGE_MARKERS:
+                if marker in line:
+                    self._stage = stage
+                    phase.update(label)
+                    break
+
+            transcript_match = _TRANSCRIPT_TIME_RE.search(line)
+            progress_match = _PROGRESS_RE.search(line)
+
+            if self._stage == "align" and progress_match:
+                # No per-segment timestamps available during alignment,
+                # so this is the best signal there is.
+                progress_bar.update(progress=50 + float(progress_match.group(1)) / 2)
+            elif self._stage == "transcribe" and duration and transcript_match:
+                end_time = float(transcript_match.group(1))
+                percent = min(100.0, (end_time / duration) * 100)
+                progress_bar.update(progress=percent / 2)
+            elif self._stage == "transcribe" and not duration and progress_match:
+                # ffprobe unavailable -- fall back to the coarser
+                # segment-count metric rather than showing nothing.
+                progress_bar.update(progress=float(progress_match.group(1)) / 2)
+
+            if not progress_match:
+                log.write_line(line)
+
+        phase.update("Finished")
+        progress_bar.update(progress=100)
+        outputs = self._output_files(params)
+        if outputs:
+            listing = "\n".join(f"  - {path}" for path in outputs)
+            log.write_line(f"[{params.audio_path.name}] output files:\n{listing}")
+        else:
+            log.write_line(
+                f"[{params.audio_path.name}] done, but no output files were found."
+            )
+            log.display = True
+
+    def _output_files(self, params: RunParams) -> list[Path]:
+        stem = params.audio_path.stem
+        return sorted(params.output_dir.glob(f"{stem}.*"))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "done-button":
