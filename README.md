@@ -26,11 +26,13 @@ dependencies (mainly torch) and, later, the actual transcription models.
 
 ## Using it
 
-o picks an audio file, d picks a destination folder, p opens the parameters
-form and starts the run once you press Start. The run screen shows a progress
-bar tracking how much of the file has been transcribed, not a wall of log
-text -- press the details button if you want to see the raw output, e.g. to
-see why something failed.
+o adds a file to the queue (or a whole folder of audio/video files at once),
+c clears the queue, d picks a destination folder, p opens the parameters form
+and runs the queue once you press Start -- files transcribe one after another
+automatically. Video files have their audio extracted via ffmpeg first. The
+run screen shows a progress bar tracking how much of the current file has
+been transcribed, not a wall of log text -- press the details button if you
+want to see the raw output, e.g. to see why something failed.
 
 Parameters worth knowing about:
 
