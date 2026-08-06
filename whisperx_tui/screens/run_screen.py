@@ -57,6 +57,7 @@ class RunScreen(Screen[None]):
             Log(id="run-log"),
             Button("Done", id="done-button", disabled=True),
             id="run-body",
+            classes="panel",
         )
         yield Footer()
 
@@ -65,6 +66,7 @@ class RunScreen(Screen[None]):
         return f"Transcribing file {index + 1} of {len(self.queue)}: {params.audio_path.name}"
 
     def on_mount(self) -> None:
+        self.query_one("#run-body").border_title = "Transcribing"
         self.query_one("#run-log", Log).display = False
         self.run_worker(self._run_queue(), exclusive=True)
 

@@ -21,8 +21,12 @@ class SetupScreen(Screen[None]):
             Log(id="setup-log"),
             Button("Install", id="install-button", variant="primary"),
             id="setup-body",
+            classes="panel",
         )
         yield Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#setup-body").border_title = "Setup required"
 
     def _missing_summary(self) -> str:
         missing = []

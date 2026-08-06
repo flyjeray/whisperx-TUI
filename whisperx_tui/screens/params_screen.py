@@ -21,8 +21,12 @@ class ParamsScreen(Screen[list[RunParams]]):
         yield Header()
         queue_listing = "\n".join(f"  - {path.name}" for path in self.queue)
         yield VerticalScroll(
-            Static(f"Queue ({len(self.queue)} file(s)):\n{queue_listing}"),
-            Static(f"Destination: {self.output_dir}"),
+            Vertical(
+                Static(f"{len(self.queue)} file(s):\n{queue_listing}"),
+                Static(f"Destination: {self.output_dir}"),
+                id="job-summary",
+                classes="panel panel-muted",
+            ),
             Label("Model"),
             Select(
                 ((m, m) for m in MODEL_SIZES),
@@ -70,10 +74,13 @@ class ParamsScreen(Screen[list[RunParams]]):
             ),
             Button("Start transcription", id="start-button", variant="primary"),
             id="params-body",
+            classes="panel",
         )
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one("#params-body").border_title = "Parameters"
+        self.query_one("#job-summary").border_title = "Job"
         self.query_one("#diarize-fields").display = bool(_DEFAULTS["diarize"])
 
     def on_switch_changed(self, event: Switch.Changed) -> None:

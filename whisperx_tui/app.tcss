@@ -1,0 +1,133 @@
+/* Shared styling for whisperx-tui. Applies to every screen. */
+
+Screen {
+    background: $surface;
+}
+
+.panel {
+    border: round $primary;
+    border-title-color: $text;
+    border-title-style: bold;
+    padding: 1 2;
+    margin: 0 0 1 0;
+    height: auto;
+}
+
+.panel-muted {
+    border: round $panel-lighten-2;
+}
+
+.hint {
+    color: $text-muted;
+}
+
+.status-ready {
+    color: $success;
+    text-style: bold;
+}
+
+.status-pending {
+    color: $text-muted;
+}
+
+.status-error {
+    color: $error;
+    text-style: bold;
+}
+
+/* -- Home screen -------------------------------------------------- */
+
+#home-body {
+    padding: 1 2;
+}
+
+#queue-panel {
+    max-height: 14;
+}
+
+#queue-list {
+    height: auto;
+    max-height: 10;
+    background: transparent;
+    scrollbar-gutter: stable;
+}
+
+#queue-list > ListItem {
+    background: transparent;
+    padding: 0 1;
+}
+
+#dest-line {
+    height: auto;
+}
+
+#hint-line {
+    margin-top: 1;
+}
+
+#last-run-line {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+/* -- Params screen -------------------------------------------------- */
+
+#params-body {
+    padding: 1 2;
+}
+
+#params-body Label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+#params-body Select,
+#params-body Input {
+    margin-bottom: 0;
+}
+
+#start-button {
+    margin-top: 2;
+}
+
+/* -- Run screen -------------------------------------------------- */
+
+#run-body {
+    padding: 1 2;
+}
+
+#run-summary {
+    text-style: bold;
+}
+
+#run-phase {
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#run-progress {
+    margin-bottom: 1;
+}
+
+#run-status {
+    margin-bottom: 1;
+}
+
+#run-log {
+    border: round $panel-lighten-2;
+    height: 12;
+    margin-bottom: 1;
+}
+
+/* -- Setup screen -------------------------------------------------- */
+
+#setup-body {
+    padding: 1 2;
+}
+
+#setup-log {
+    border: round $panel-lighten-2;
+    height: 12;
+    margin-top: 1;
+    margin-bottom: 1;
+}
