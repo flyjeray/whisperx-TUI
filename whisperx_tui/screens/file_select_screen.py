@@ -6,13 +6,10 @@ from textual.widgets import Button
 from textual_fspicker import FileOpen, Filters
 from textual_fspicker.parts import DirectoryNavigation
 
-AUDIO_EXTENSIONS = {
-    ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma",
-    ".mp4", ".mkv", ".mov",
-}
+from whisperx_tui.config import MEDIA_EXTENSIONS
 
 AUDIO_FILTERS = Filters(
-    ("Audio/video files", lambda path: path.suffix.lower() in AUDIO_EXTENSIONS),
+    ("Audio/video files", lambda path: path.suffix.lower() in MEDIA_EXTENSIONS),
     ("All files", lambda _path: True),
 )
 
@@ -37,7 +34,7 @@ class AudioFileOrFolderOpen(FileOpen):
 
 def _audio_files_in_folder(folder: Path) -> list[Path]:
     return sorted(
-        (p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS),
+        (p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS),
         key=lambda p: p.name.lower(),
     )
 

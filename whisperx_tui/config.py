@@ -11,6 +11,12 @@ CPU_COMPUTE_TYPES = ("int8", "float32")
 MODEL_SIZES = ("tiny", "base", "small", "medium", "large-v2", "large-v3", "large-v3-turbo")
 TASKS = ("transcribe", "translate")
 
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"}
+# Video files get their audio extracted via ffmpeg before being handed to
+# whisperx -- see runner.extract_audio.
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov"}
+MEDIA_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
+
 
 @dataclass
 class RunParams:

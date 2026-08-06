@@ -27,6 +27,30 @@ async def get_audio_duration_seconds(path: Path) -> float | None:
         return None
 
 
+async def extract_audio(video_path: Path, tmp_dir: Path) -> Path:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is required to extract audio from video files")
+
+    # Keep the extracted file's stem matching the source video's, since
+    # whisperx names its output files after whatever audio path it's given.
+    output_path = tmp_dir / f"{video_path.stem}.wav"
+    process = await asyncio.create_subprocess_exec(
+        ffmpeg, "-y", "-i", str(video_path),
+        "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+        str(output_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg failed to extract audio from {video_path.name}: "
+            f"{stderr.decode(errors='replace').strip()}"
+        )
+    return output_path
+
+
 def build_argv(params: RunParams) -> list[str]:
     argv = [
         str(VENV_DIR / "bin" / "whisperx"),

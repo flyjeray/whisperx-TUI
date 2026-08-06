@@ -1,4 +1,7 @@
+import dataclasses
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -6,8 +9,8 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Log, ProgressBar, Static
 
-from whisperx_tui.config import RunParams
-from whisperx_tui.runner import get_audio_duration_seconds, run_whisperx
+from whisperx_tui.config import RunParams, VIDEO_EXTENSIONS
+from whisperx_tui.runner import extract_audio, get_audio_duration_seconds, run_whisperx
 
 _PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%")
 _TRANSCRIPT_TIME_RE = re.compile(r"Transcript: \[[\d.]+ --> ([\d.]+)\]")
@@ -41,6 +44,7 @@ class RunScreen(Screen[None]):
         self.queue = queue
         self._stage = "detect"
         self._failures: list[tuple[RunParams, Exception]] = []
+        self._tmp_dir: Path | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -69,14 +73,18 @@ class RunScreen(Screen[None]):
         status = self.query_one("#run-status", Static)
         log = self.query_one("#run-log", Log)
 
-        for index, params in enumerate(self.queue):
-            summary.update(self._queue_summary(index))
-            self._stage = "detect"
-            try:
-                await self._run_one(params)
-            except Exception as exc:
-                self._failures.append((params, exc))
-                log.write_line(f"[{params.audio_path.name}] failed: {exc}")
+        try:
+            for index, params in enumerate(self.queue):
+                summary.update(self._queue_summary(index))
+                self._stage = "detect"
+                try:
+                    await self._run_one(params)
+                except Exception as exc:
+                    self._failures.append((params, exc))
+                    log.write_line(f"[{params.audio_path.name}] failed: {exc}")
+        finally:
+            if self._tmp_dir is not None:
+                shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
         if self._failures:
             failed = "\n".join(f"  - {p.audio_path.name}: {exc}" for p, exc in self._failures)
@@ -89,38 +97,54 @@ class RunScreen(Screen[None]):
             status.update(f"Done. All {len(self.queue)} file(s) transcribed successfully.")
         self.query_one("#done-button", Button).disabled = False
 
+    def _ensure_tmp_dir(self) -> Path:
+        if self._tmp_dir is None:
+            self._tmp_dir = Path(tempfile.mkdtemp(prefix="whisperx-tui-"))
+        return self._tmp_dir
+
     async def _run_one(self, params: RunParams) -> None:
         log = self.query_one("#run-log", Log)
         phase = self.query_one("#run-phase", Static)
         progress_bar = self.query_one("#run-progress", ProgressBar)
         progress_bar.update(progress=0)
-        duration = await get_audio_duration_seconds(params.audio_path)
 
-        async for line in run_whisperx(params):
-            for marker, stage, label in _STAGE_MARKERS:
-                if marker in line:
-                    self._stage = stage
-                    phase.update(label)
-                    break
+        run_params = params
+        if params.audio_path.suffix.lower() in VIDEO_EXTENSIONS:
+            phase.update("Extracting audio from video...")
+            extracted_path = await extract_audio(params.audio_path, self._ensure_tmp_dir())
+            run_params = dataclasses.replace(params, audio_path=extracted_path)
 
-            transcript_match = _TRANSCRIPT_TIME_RE.search(line)
-            progress_match = _PROGRESS_RE.search(line)
+        try:
+            duration = await get_audio_duration_seconds(run_params.audio_path)
 
-            if self._stage == "align" and progress_match:
-                # No per-segment timestamps available during alignment,
-                # so this is the best signal there is.
-                progress_bar.update(progress=50 + float(progress_match.group(1)) / 2)
-            elif self._stage == "transcribe" and duration and transcript_match:
-                end_time = float(transcript_match.group(1))
-                percent = min(100.0, (end_time / duration) * 100)
-                progress_bar.update(progress=percent / 2)
-            elif self._stage == "transcribe" and not duration and progress_match:
-                # ffprobe unavailable -- fall back to the coarser
-                # segment-count metric rather than showing nothing.
-                progress_bar.update(progress=float(progress_match.group(1)) / 2)
+            async for line in run_whisperx(run_params):
+                for marker, stage, label in _STAGE_MARKERS:
+                    if marker in line:
+                        self._stage = stage
+                        phase.update(label)
+                        break
 
-            if not progress_match:
-                log.write_line(line)
+                transcript_match = _TRANSCRIPT_TIME_RE.search(line)
+                progress_match = _PROGRESS_RE.search(line)
+
+                if self._stage == "align" and progress_match:
+                    # No per-segment timestamps available during alignment,
+                    # so this is the best signal there is.
+                    progress_bar.update(progress=50 + float(progress_match.group(1)) / 2)
+                elif self._stage == "transcribe" and duration and transcript_match:
+                    end_time = float(transcript_match.group(1))
+                    percent = min(100.0, (end_time / duration) * 100)
+                    progress_bar.update(progress=percent / 2)
+                elif self._stage == "transcribe" and not duration and progress_match:
+                    # ffprobe unavailable -- fall back to the coarser
+                    # segment-count metric rather than showing nothing.
+                    progress_bar.update(progress=float(progress_match.group(1)) / 2)
+
+                if not progress_match:
+                    log.write_line(line)
+        finally:
+            if run_params.audio_path != params.audio_path:
+                run_params.audio_path.unlink(missing_ok=True)
 
         phase.update("Finished")
         progress_bar.update(progress=100)
