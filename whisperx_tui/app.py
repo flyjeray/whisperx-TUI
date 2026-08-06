@@ -3,7 +3,7 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static
 
-from whisperx_tui.config import RunParams
+from whisperx_tui.config import RunParams, load_last_dirs, save_last_dirs
 from whisperx_tui.deps import is_ffmpeg_on_path, is_whisperx_importable
 from whisperx_tui.screens.dest_select_screen import pick_destination_folder
 from whisperx_tui.screens.file_select_screen import pick_audio_paths
@@ -28,6 +28,7 @@ class WhisperXTUIApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.queue: list[Path] = []
+        self._last_audio_dir, self._last_dest_dir = load_last_dirs()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -77,7 +78,7 @@ class WhisperXTUIApp(App[None]):
         self.run_worker(self._pick_params(), exclusive=True)
 
     async def _pick_file(self) -> None:
-        result = await pick_audio_paths(self, start_dir=Path.home())
+        result = await pick_audio_paths(self, start_dir=self._last_audio_dir or Path.home())
         if result is None:
             return
         if not result:
@@ -86,6 +87,8 @@ class WhisperXTUIApp(App[None]):
         already_queued = set(self.queue)
         added = [path for path in result if path not in already_queued]
         self.queue = self.queue + added
+        self._last_audio_dir = result[0].parent
+        save_last_dirs(self._last_audio_dir, self._last_dest_dir)
         self._refresh_status()
         if len(added) < len(result):
             self.notify(f"Added {len(added)} file(s); {len(result) - len(added)} already queued.")
@@ -93,9 +96,11 @@ class WhisperXTUIApp(App[None]):
             self.notify(f"Added {len(added)} file(s) to the queue.")
 
     async def _pick_dest(self) -> None:
-        result = await pick_destination_folder(self, start_dir=Path.home())
+        result = await pick_destination_folder(self, start_dir=self._last_dest_dir or Path.home())
         if result is not None:
             self.dest_dir = result
+            self._last_dest_dir = result
+            save_last_dirs(self._last_audio_dir, self._last_dest_dir)
             self._refresh_status()
 
     async def _pick_params(self) -> None:

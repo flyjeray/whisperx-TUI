@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -5,6 +6,7 @@ APP_NAME = "whisperx-tui"
 APP_DIR = Path.home() / "Library" / "Application Support" / APP_NAME
 VENV_DIR = APP_DIR / "venv"
 MODEL_CACHE_DIR = APP_DIR / "models"
+STATE_FILE = APP_DIR / "state.json"
 
 OUTPUT_FORMATS = ("all", "srt", "vtt", "txt", "tsv", "json")
 CPU_COMPUTE_TYPES = ("int8", "float32")
@@ -35,3 +37,29 @@ class RunParams:
     hf_token: str | None = None
     min_speakers: int | None = None
     max_speakers: int | None = None
+
+
+def load_last_dirs() -> tuple[Path | None, Path | None]:
+    """Returns (last audio browse dir, last destination dir), skipping any that no longer exist."""
+    try:
+        data = json.loads(STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None, None
+
+    def valid_dir(raw: object) -> Path | None:
+        path = Path(raw) if raw else None
+        return path if path and path.is_dir() else None
+
+    return valid_dir(data.get("last_audio_dir")), valid_dir(data.get("last_dest_dir"))
+
+
+def save_last_dirs(audio_dir: Path | None, dest_dir: Path | None) -> None:
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(
+        json.dumps(
+            {
+                "last_audio_dir": str(audio_dir) if audio_dir else None,
+                "last_dest_dir": str(dest_dir) if dest_dir else None,
+            }
+        )
+    )
